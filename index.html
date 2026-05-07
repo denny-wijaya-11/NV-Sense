@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NV-Sense | AI Sentiment Tracker</title>
+    
+    <link rel="icon" type="image/png" href="Images/nv_sense_logo.png">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Pengaturan Background Shadow */
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #0b0b0b; 
+            color: white; 
+            text-align: center; 
+            padding: 20px; 
+            margin: 0;
+            position: relative;
+            min-height: 100vh;
+        }
+
+        /* Ini adalah lapisan background.jpeg yang dibikin "shadow" */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image: url('Images/background.jpg'); /* Pastikan path file benar */
+            background-size: cover;
+            background-position: center;
+            opacity: 0.15; /* Atur angka ini (0.1 - 0.2) untuk tingkat "kegelapan" background */
+            z-index: -1; /* Supaya dia beneran di paling belakang */
+        }
+
+        .container { max-width: 600px; margin: auto; position: relative; z-index: 1; }
+        .logo-container img { width: 220px; height: auto; margin: 20px 0; }
+        
+        .card { 
+            background: rgba(24, 24, 24, 0.85); /* Dibuat sedikit transparan agar menyatu */
+            backdrop-filter: blur(5px); /* Efek kaca kekinian */
+            padding: 25px; 
+            border-radius: 24px; 
+            border: 1px solid #76b900; 
+            box-shadow: 0 0 30px rgba(118, 185, 0, 0.15);
+            margin-bottom: 20px;
+        }
+        
+        .stock-price { font-size: 18px; color: #aaa; margin-bottom: 10px; }
+        .price-value { color: #fff; font-weight: bold; font-size: 24px; }
+        .sentiment-value { font-size: 72px; color: #76b900; font-weight: 800; margin: 5px 0; }
+        
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-bottom: 25px; }
+        .btn {
+            border: none; padding: 12px 20px; border-radius: 12px; 
+            font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn-main { background: #76b900; color: black; }
+        .btn-outline { background: transparent; color: #76b900; border: 1px solid #76b900; text-decoration: none; }
+        .btn:hover { transform: translateY(-3px); opacity: 0.9; }
+
+        .news-item { 
+            background: rgba(30, 30, 30, 0.8); 
+            padding: 15px; border-radius: 12px; 
+            margin-bottom: 12px; border-left: 5px solid #76b900; text-align: left;
+            backdrop-filter: blur(3px);
+        }
+        canvas { background: rgba(24, 24, 24, 0.8); border-radius: 20px; padding: 15px; margin-top: 10px; border: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="logo-container">
+            <img src="Images/nv_sense_logo.png" alt="NV-Sense Logo">
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-main" id="btn-action" onclick="runFullAnalysis()">START AI SCAN</button>
+            <a href="https://www.nvidia.com/en-us/about-nvidia/investor-relations/" target="_blank" class="btn btn-outline">NVIDIA INVESTORS</a>
+        </div>
+
+        <div class="card" id="main-card">
+            <div class="stock-price">NVDA: <span class="price-value" id="stock-value">$1,150.00</span> <span style="color: #76b900; font-size: 14px;">(+2.4%)</span></div>
+            <div class="sentiment-value" id="sentiment-score">--%</div>
+            <p id="market-status" style="color: #76b900; letter-spacing: 2px; font-weight: bold;">READY</p>
+        </div>
+
+        <canvas id="sentimentChart" width="400" height="220"></canvas>
+
+        <div class="news-box" style="margin-top: 30px;">
+            <h3 style="text-align: left; color: #76b900;">AI INSIGHT BREAKDOWN</h3>
+            <div id="news-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const GOOGLE_API_KEY = 'AIzaSyDZ2q6K4LoDiUr8YINt93G3MKOig0xuEQA';
+
+        const dummyNews = [
+            "NVIDIA and Corning partnership for AI Infrastructure",
+            "New Nemotron-3 Nano Omni Model Launch by NVIDIA",
+            "Global demand for NVIDIA AI chips reaches record high",
+            "NVIDIA quarterly earnings exceed analyst expectations"
+        ];
+
+        setInterval(() => {
+            let basePrice = 1150.00;
+            let randomVar = (Math.random() * 2) - 1;
+            document.getElementById('stock-value').innerText = "$" + (basePrice + randomVar).toFixed(2);
+        }, 3000);
+
+        async function analyzeSentiment(text) {
+            try {
+                const url = `https://language.googleapis.com/v1/documents:analyzeSentiment?key=${GOOGLE_API_KEY}`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        document: { content: text, type: 'PLAIN_TEXT' },
+                        encodingType: 'UTF8'
+                    })
+                });
+                const data = await response.json();
+                return data.documentSentiment.score;
+            } catch (e) { return 0; }
+        }
+
+        async function runFullAnalysis() {
+            const statusDisplay = document.getElementById('market-status');
+            const scoreDisplay = document.getElementById('sentiment-score');
+            const container = document.getElementById('news-container');
+            const btn = document.getElementById('btn-action');
+            const card = document.getElementById('main-card');
+
+            btn.disabled = true;
+            statusDisplay.innerText = "QUERYING CLOUD AI...";
+            container.innerHTML = "";
+            
+            let totalScore = 0;
+
+            for (let i = 0; i < dummyNews.length; i++) {
+                const score = await analyzeSentiment(dummyNews[i]);
+                totalScore += score;
+                const newsItem = document.createElement('div');
+                newsItem.className = 'news-item';
+                const vibe = score > 0.2 ? "✅ POSITIVE" : (score < -0.2 ? "😡 NEGATIVE" : "😐 NEUTRAL");
+                newsItem.innerHTML = `<small style="color:#76b900; font-weight:bold">${vibe}</small><br>${dummyNews[i]}`;
+                container.appendChild(newsItem);
+            }
+
+            const finalPercent = Math.round(((totalScore / dummyNews.length) + 1) * 50);
+            
+            let curr = 0;
+            let interval = setInterval(() => {
+                if(curr >= finalPercent) {
+                    clearInterval(interval);
+                    statusDisplay.innerText = finalPercent > 50 ? "SENTIMENT: BULLISH" : "SENTIMENT: BEARISH";
+                    btn.disabled = false;
+                    if(finalPercent < 50) {
+                        scoreDisplay.style.color = "#ff4444";
+                        card.style.borderColor = "#ff4444";
+                    }
+                } else {
+                    curr++;
+                    scoreDisplay.innerText = curr + "%";
+                }
+            }, 20);
+        }
+
+        const ctx = document.getElementById('sentimentChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['01 Mei', '02 Mei', '03 Mei', '04 Mei', 'Today'],
+                datasets: [{
+                    data: [65, 58, 70, 72, 80],
+                    borderColor: '#76b900',
+                    backgroundColor: 'rgba(118, 185, 0, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#666' } } } }
+        });
+    </script>
+</body>
+</html>
